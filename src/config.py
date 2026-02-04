@@ -4,7 +4,6 @@ Architect Agent - Configuration
 Application settings loaded from environment variables.
 """
 from pydantic_settings import BaseSettings
-from pydantic import field_validator
 from typing import List
 import json
 from functools import lru_cache
@@ -34,22 +33,23 @@ class Settings(BaseSettings):
     REDIS_URL: str = ""
 
     # ============ CORS ============
-    CORS_ORIGINS: List[str] = ["*"]
+    # תיקון: שמירה כ-string כדי למנוע בעיית פרסור JSON ב-pydantic-settings
+    CORS_ORIGINS_RAW: str = "*"
 
-    # תיקון: טיפול ב-CORS_ORIGINS ריק או לא תקין
-    @field_validator('CORS_ORIGINS', mode='before')
-    @classmethod
-    def parse_cors_origins(cls, v):
+    @property
+    def CORS_ORIGINS(self) -> List[str]:
         """פרסור CORS_ORIGINS מ-string ל-list."""
-        if isinstance(v, str):
-            if not v or v.strip() == "":
-                return ["*"]
+        v = self.CORS_ORIGINS_RAW
+        if not v or v.strip() == "":
+            return ["*"]
+        # אם מתחיל ב-[ זה כנראה JSON
+        if v.strip().startswith("["):
             try:
                 return json.loads(v)
             except json.JSONDecodeError:
-                # אם לא JSON, מפריד לפי פסיקים
-                return [x.strip() for x in v.split(',')]
-        return v
+                pass
+        # אחרת - מפריד לפי פסיקים
+        return [x.strip() for x in v.split(',')]
 
     # ============ Agent Settings ============
     MAX_ITERATIONS: int = 5
