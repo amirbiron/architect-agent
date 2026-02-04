@@ -11,6 +11,7 @@ import logging
 from ..db.repositories import SessionRepository, BlueprintRepository
 from ..agent.graph import run_agent, continue_conversation
 from ..agent.state import ProjectContext
+from .main import reporter
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,7 @@ async def create_session(request: CreateSessionRequest):
     clarifying questions or initial recommendations.
     """
     logger.info(f"Creating new session with message: {request.message[:50]}...")
+    reporter.report_activity("web_user")  # דיווח פעילות
 
     try:
         # Create session in DB
