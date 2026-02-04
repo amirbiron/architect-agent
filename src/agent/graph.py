@@ -33,7 +33,7 @@ def create_architect_graph(llm_client: LLMClient = None):
     Create the LangGraph workflow for the Architect Agent.
 
     The flow:
-    intake → priority → conflict → deep_dive → pattern → assess_feasibility → blueprint → critic
+    intake → priority → conflict → deep_dive → pattern → assess_feasibility → generate_blueprint → critic
                                        ↑                                              ↓
                                        └──────────── (if confidence < 0.7) ──────────┘
 
@@ -95,9 +95,9 @@ def create_architect_graph(llm_client: LLMClient = None):
     graph.add_node("conflict", _conflict)
     graph.add_node("deep_dive", _deep_dive)
     graph.add_node("pattern", _pattern)
-    # שינוי שם node כדי להימנע מהתנגשות עם שדה feasibility ב-state
+    # שינוי שמות nodes כדי להימנע מהתנגשות עם שדות ב-state
     graph.add_node("assess_feasibility", _feasibility)
-    graph.add_node("blueprint", _blueprint)
+    graph.add_node("generate_blueprint", _blueprint)
     graph.add_node("critic", _critic)
 
     # ========================================
@@ -115,8 +115,8 @@ def create_architect_graph(llm_client: LLMClient = None):
     graph.add_edge("conflict", "deep_dive")
     graph.add_edge("deep_dive", "pattern")
     graph.add_edge("pattern", "assess_feasibility")
-    graph.add_edge("assess_feasibility", "blueprint")
-    graph.add_edge("blueprint", "critic")
+    graph.add_edge("assess_feasibility", "generate_blueprint")
+    graph.add_edge("generate_blueprint", "critic")
 
     # ========================================
     # CONDITIONAL EDGE FROM CRITIC
