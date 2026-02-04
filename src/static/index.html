@@ -160,6 +160,13 @@
         let sessionId = null;
         const API_BASE = '';  // אותו דומיין
 
+        // פונקציה למניעת XSS - escape תווים מסוכנים
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
         // הוספת הודעה לצ'אט
         function addMessage(content, role) {
             const messages = document.getElementById('messages');
@@ -169,9 +176,10 @@
 
             const div = document.createElement('div');
             div.className = `message ${role}`;
-            // תמיכה בסיסית ב-markdown (code blocks)
-            div.innerHTML = content.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre>$2</pre>')
-                                   .replace(/\n/g, '<br>');
+            // תמיכה בסיסית ב-markdown (code blocks) עם הגנה מ-XSS
+            const safeContent = escapeHtml(content);
+            div.innerHTML = safeContent.replace(/```(\w*)\n([\s\S]*?)```/g, '<pre>$2</pre>')
+                                       .replace(/\n/g, '<br>');
             messages.appendChild(div);
             messages.scrollTop = messages.scrollHeight;
         }
@@ -183,7 +191,7 @@
             document.getElementById('confidence').textContent = Math.round((data.confidence_score || 0) * 100) + '%';
         }
 
-        // הצגת Blueprint
+        // הצגת Blueprint עם הגנה מ-XSS
         function showBlueprint(blueprint) {
             const area = document.getElementById('blueprintArea');
             const content = document.getElementById('blueprintContent');
@@ -193,13 +201,13 @@
             if (blueprint.architecture_style) {
                 html += `<div class="blueprint-section">
                     <h3>סגנון ארכיטקטורה</h3>
-                    <p>${blueprint.architecture_style}</p>
+                    <p>${escapeHtml(blueprint.architecture_style)}</p>
                 </div>`;
             }
             if (blueprint.components && blueprint.components.length) {
                 html += `<div class="blueprint-section">
                     <h3>רכיבים</h3>
-                    <ul>${blueprint.components.map(c => `<li>${c.name || c}</li>`).join('')}</ul>
+                    <ul>${blueprint.components.map(c => `<li>${escapeHtml(c.name || c)}</li>`).join('')}</ul>
                 </div>`;
             }
             if (blueprint.tech_stack) {
@@ -207,7 +215,7 @@
                     <h3>Tech Stack</h3>
                     <ul>`;
                 for (const [key, val] of Object.entries(blueprint.tech_stack)) {
-                    html += `<li><strong>${key}:</strong> ${val}</li>`;
+                    html += `<li><strong>${escapeHtml(key)}:</strong> ${escapeHtml(String(val))}</li>`;
                 }
                 html += `</ul></div>`;
             }
