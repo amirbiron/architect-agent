@@ -497,6 +497,8 @@ def create_architect_graph(llm_client: MultiProviderLLM = None):
     # ========================================
 
     async def _generator(state: ProjectContext) -> Dict[str, Any]:
+        # איפוס waiting_for_user - אם הגענו לכאן, המשתמש כבר הגיב
+        state.waiting_for_user = False
         ctx, reply = await generator_node(state, llm_client)
         return ctx.model_dump()
 
@@ -533,7 +535,8 @@ def create_architect_graph(llm_client: MultiProviderLLM = None):
         else:
             state_dict = state.model_dump()
 
-        # אם יש synthesizer_output - חוזרים מ-ask_user, ממשיכים מ-generator
+        # אם יש synthesizer_output וחיכינו למשתמש - חוזרים מ-ask_user
+        # הערה: waiting_for_user יאופס ב-generator node (ראה למטה)
         if state_dict.get("synthesizer_output") and state_dict.get("waiting_for_user"):
             return "generator"
 
