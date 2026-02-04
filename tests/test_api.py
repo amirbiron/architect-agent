@@ -60,13 +60,12 @@ class TestHealthEndpoints:
 
     @pytest.mark.asyncio
     async def test_root(self, client):
-        """Test root endpoint."""
+        """Test root endpoint - returns HTML page."""
         response = await client.get("/")
         assert response.status_code == 200
-        data = response.json()
-        assert "name" in data
-        assert "version" in data
-        assert data["status"] == "running"
+        # ממשק הווב מחזיר HTML
+        assert "text/html" in response.headers.get("content-type", "")
+        assert "Architect Agent" in response.text
 
     @pytest.mark.asyncio
     async def test_health_check(self, client, mock_mongodb):
@@ -91,7 +90,7 @@ class TestSessionEndpoints:
     async def test_create_session_validation(self, client):
         """Test that short messages are rejected."""
         response = await client.post(
-            "/api/v1/sessions",
+            "/api/sessions",
             json={"message": "short"}
         )
         # Should fail validation (min 10 chars)
@@ -120,7 +119,7 @@ class TestSessionEndpoints:
         mock_agent[0].return_value = mock_ctx  # run_agent
 
         response = await client.post(
-            "/api/v1/sessions",
+            "/api/sessions",
             json={"message": "I want to build an e-commerce platform with 100K users"}
         )
 
@@ -134,7 +133,7 @@ class TestSessionEndpoints:
         """Test getting non-existent session."""
         mock_session_repo.get = AsyncMock(return_value=None)
 
-        response = await client.get("/api/v1/sessions/nonexistent-id")
+        response = await client.get("/api/sessions/nonexistent-id")
         assert response.status_code == 404
 
     @pytest.mark.asyncio
@@ -143,7 +142,7 @@ class TestSessionEndpoints:
         mock_session_repo.get = AsyncMock(return_value=None)
 
         response = await client.post(
-            "/api/v1/sessions/nonexistent-id/chat",
+            "/api/sessions/nonexistent-id/chat",
             json={"message": "Hello"}
         )
         assert response.status_code == 404
@@ -159,7 +158,7 @@ class TestPatternsEndpoint:
     @pytest.mark.asyncio
     async def test_list_patterns(self, client):
         """Test listing available patterns."""
-        response = await client.get("/api/v1/patterns")
+        response = await client.get("/api/patterns")
         assert response.status_code == 200
         data = response.json()
         assert "patterns" in data
@@ -188,7 +187,7 @@ class TestBlueprintEndpoints:
 
         mock_session_repo.get = AsyncMock(return_value=mock_ctx)
 
-        response = await client.get("/api/v1/sessions/test-123/blueprint")
+        response = await client.get("/api/sessions/test-123/blueprint")
         assert response.status_code == 404
         assert "not yet generated" in response.json()["detail"]
 
