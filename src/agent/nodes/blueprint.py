@@ -35,9 +35,33 @@ class ADRsResponse(BaseModel):
 
 class RoadmapResponse(BaseModel):
     """LLM response for roadmap."""
-    phases: dict  # phase_name -> list of tasks
+    phases: dict  # phase_name -> list of tasks או מבנה מורכב יותר
     next_steps: List[str]
     assumptions: List[str]
+
+    def get_normalized_phases(self) -> dict:
+        """
+        מנרמל את phases למבנה Dict[str, List[str]].
+        מטפל במקרים שה-LLM מחזיר מבנה מורכב יותר.
+        """
+        normalized = {}
+        for phase_key, phase_value in self.phases.items():
+            if isinstance(phase_value, list):
+                # כבר בפורמט הנכון
+                normalized[phase_key] = phase_value
+            elif isinstance(phase_value, dict):
+                # מבנה מורכב - מחלץ את המשימות
+                name = phase_value.get("name", phase_key)
+                tasks = phase_value.get("tasks", [])
+                if not tasks:
+                    # אם אין tasks, ממיר את שאר השדות לרשימה
+                    tasks = [str(v) for k, v in phase_value.items()
+                             if k not in ("name", "description") and v]
+                normalized[name] = tasks if tasks else ["משימות לא הוגדרו"]
+            else:
+                # ערך פשוט - הופך לרשימה
+                normalized[phase_key] = [str(phase_value)]
+        return normalized
 
 
 async def blueprint_node(
@@ -75,7 +99,7 @@ async def blueprint_node(
         executive_summary=summary,
         mermaid_diagram=mermaid,
         adrs=adrs,
-        roadmap=roadmap_data.phases,
+        roadmap=roadmap_data.get_normalized_phases(),
         next_steps=roadmap_data.next_steps,
         assumptions=roadmap_data.assumptions,
         unknowns=ctx.open_questions
