@@ -45,6 +45,9 @@ dev = [
 redis = [
     "redis>=5.0.0",
 ]
+gemini = [
+    "google-genai>=1.0.0",
+]
 
 [project.scripts]
 architect-agent = "src.cli:main"
