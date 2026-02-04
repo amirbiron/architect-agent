@@ -21,7 +21,6 @@ from .nodes import (
     feasibility_node,
     blueprint_node,
     critic_node,
-    route_from_critic
 )
 from ..llm.client import LLMClient, create_llm_client
 
@@ -123,25 +122,26 @@ def create_architect_graph(llm_client: LLMClient = None):
     # ========================================
 
     def _route_from_critic(state) -> str:
-        """Routing function for conditional edge from critic."""
+        """
+        Routing function for conditional edge from critic.
+        הלוגיקה העיקרית נמצאת ב-critic_node, כאן רק קוראים את ה-routing hint.
+        """
         # ממיר ל-dict כדי לגשת ל-_routing_hint שנוסף ב-critic node
         if isinstance(state, dict):
             state_dict = state
         else:
-            # state הוא ProjectContext - ממיר ל-dict
             state_dict = state.model_dump()
 
         routing_hint = state_dict.get("_routing_hint")
-        if routing_hint:
-            if routing_hint in ["deep_dive", "conflict", "pattern"]:
-                logger.info(f"Critic routing to: {routing_hint}")
-                return routing_hint
 
-        # Fallback to route_from_critic logic
-        ctx = ProjectContext.model_validate(state_dict)
-        result = route_from_critic(ctx)
-        logger.info(f"Critic routing (fallback) to: {result}")
-        return result
+        # אם יש routing hint תקין - משתמשים בו
+        if routing_hint and routing_hint in ["deep_dive", "conflict", "pattern"]:
+            logger.info(f"Critic routing to: {routing_hint}")
+            return routing_hint
+
+        # אחרת - מסיימים (critic_node כבר החליט לסיים)
+        logger.info("Critic routing to: end")
+        return "end"
 
     graph.add_conditional_edges(
         "critic",
@@ -255,9 +255,9 @@ async def continue_conversation(
             process_deep_dive_response(current_ctx, user_message)
         elif current_ctx.current_node == "critic":
             # המשתמש סיפק מידע נוסף שהמבקר ביקש
-            # ההודעה כבר נשמרה ב-conversation_history (שורה 239)
-            # מחזירים ל-deep_dive לעיבוד המידע החדש
-            current_ctx.current_node = "deep_dive"
+            # ההודעה כבר נשמרה ב-conversation_history
+            # הגרף ירוץ מההתחלה, אבל עם ה-context המעודכן שכולל את ההודעה החדשה
+            pass
 
         current_ctx.waiting_for_user = False
 
