@@ -35,9 +35,54 @@ class ADRsResponse(BaseModel):
 
 class RoadmapResponse(BaseModel):
     """LLM response for roadmap."""
-    phases: dict  # phase_name -> list of tasks
+    phases: dict  # phase_name -> list of tasks או מבנה מורכב יותר
     next_steps: List[str]
     assumptions: List[str]
+
+    def get_normalized_phases(self) -> dict:
+        """
+        מנרמל את phases למבנה Dict[str, List[str]].
+        מטפל במקרים שה-LLM מחזיר מבנה מורכב יותר.
+        """
+        normalized = {}
+        for phase_key, phase_value in self.phases.items():
+            if isinstance(phase_value, list):
+                # מנרמל כל אלמנט ברשימה ל-string
+                normalized[phase_key] = [str(item) for item in phase_value]
+            elif isinstance(phase_value, dict):
+                # מבנה מורכב - מחלץ את המשימות
+                # משתמש ב-phase_key כדי למנוע דריסה של phases עם אותו name
+                raw_tasks = phase_value.get("tasks", [])
+
+                # יוצר רשימה חדשה כדי לא לשנות את המקור
+                tasks = []
+
+                if raw_tasks:
+                    if isinstance(raw_tasks, str):
+                        # אם tasks הוא string, מוסיף אותו כמשימה אחת
+                        tasks.append(raw_tasks)
+                    elif isinstance(raw_tasks, list):
+                        # מנרמל את tasks ל-strings
+                        tasks.extend([str(item) for item in raw_tasks])
+                    else:
+                        tasks.append(str(raw_tasks))
+                else:
+                    # אם אין tasks, מחפש שדות אחרים עם רשימות
+                    for k, v in phase_value.items():
+                        if k not in ("name", "description", "tasks") and v:
+                            if isinstance(v, list):
+                                # אם זו רשימה, מוסיף את האלמנטים שלה
+                                tasks.extend([str(item) for item in v])
+                            elif isinstance(v, str):
+                                tasks.append(v)
+                            else:
+                                tasks.append(str(v))
+
+                normalized[phase_key] = tasks if tasks else ["משימות לא הוגדרו"]
+            else:
+                # ערך פשוט - הופך לרשימה
+                normalized[phase_key] = [str(phase_value)]
+        return normalized
 
 
 async def blueprint_node(
@@ -75,7 +120,7 @@ async def blueprint_node(
         executive_summary=summary,
         mermaid_diagram=mermaid,
         adrs=adrs,
-        roadmap=roadmap_data.phases,
+        roadmap=roadmap_data.get_normalized_phases(),
         next_steps=roadmap_data.next_steps,
         assumptions=roadmap_data.assumptions,
         unknowns=ctx.open_questions
