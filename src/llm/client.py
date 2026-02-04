@@ -106,7 +106,12 @@ class ClaudeLLMClient(BaseLLMClient):
         max_tokens: int = 4096,
         temperature: float = 0.7
     ):
-        self.client = AsyncAnthropic(api_key=api_key or settings.ANTHROPIC_API_KEY)
+        # ולידציה של API key
+        self.api_key = api_key or settings.ANTHROPIC_API_KEY
+        if not self.api_key:
+            raise ValueError("ANTHROPIC_API_KEY לא הוגדר")
+
+        self.client = AsyncAnthropic(api_key=self.api_key)
         self.model = model or settings.CLAUDE_MODEL
         self.max_tokens = max_tokens
         self.temperature = temperature
@@ -232,6 +237,7 @@ Use Hebrew for text content where appropriate."""
 class GeminiLLMClient(BaseLLMClient):
     """
     LLM Client עבור Gemini (Google).
+    משתמש ב-Client class לתמיכה ב-API key per-instance.
     """
 
     def __init__(
@@ -243,25 +249,25 @@ class GeminiLLMClient(BaseLLMClient):
     ):
         # ייבוא דינמי כדי שלא תהיה שגיאה אם החבילה לא מותקנת
         try:
-            import google.generativeai as genai
+            from google import genai
+            from google.genai import types
             self.genai = genai
+            self.types = types
         except ImportError:
             raise ImportError(
-                "חבילת google-generativeai לא מותקנת. "
-                "התקן אותה עם: pip install google-generativeai"
+                "חבילת google-genai לא מותקנת. "
+                "התקן אותה עם: pip install google-genai"
             )
 
         self.api_key = api_key or settings.GOOGLE_API_KEY
         if not self.api_key:
             raise ValueError("GOOGLE_API_KEY לא הוגדר")
 
-        self.genai.configure(api_key=self.api_key)
+        # יצירת Client instance עם API key ספציפי (לא גלובלי)
+        self.client = genai.Client(api_key=self.api_key)
         self.model_name = model or settings.GEMINI_MODEL
         self.max_tokens = max_tokens
         self.temperature = temperature
-
-        # יצירת המודל
-        self.model = self.genai.GenerativeModel(self.model_name)
 
     @retry(
         stop=stop_after_attempt(3),
@@ -275,25 +281,20 @@ class GeminiLLMClient(BaseLLMClient):
         temperature: Optional[float] = None
     ) -> str:
         """יצירת תשובה טקסטית מ-Gemini."""
-        # Gemini משתמש ב-system instruction דרך הקונפיגורציה
-        generation_config = self.genai.GenerationConfig(
+        # הגדרות יצירה
+        config = self.types.GenerateContentConfig(
             max_output_tokens=max_tokens or self.max_tokens,
-            temperature=temperature if temperature is not None else self.temperature
+            temperature=temperature if temperature is not None else self.temperature,
+            system_instruction=system_prompt
         )
-
-        # שילוב system prompt בתוך ה-prompt
-        full_prompt = prompt
-        if system_prompt:
-            full_prompt = f"{system_prompt}\n\n{prompt}"
 
         logger.debug(f"קורא ל-Gemini API עם מודל: {self.model_name}")
 
-        # Gemini API הוא סינכרוני, נעטוף אותו
-        import asyncio
-        response = await asyncio.to_thread(
-            self.model.generate_content,
-            full_prompt,
-            generation_config=generation_config
+        # קריאה אסינכרונית ל-API
+        response = await self.client.aio.models.generate_content(
+            model=self.model_name,
+            contents=prompt,
+            config=config
         )
 
         content = response.text
@@ -362,33 +363,28 @@ Use Hebrew for text content where appropriate."""
     ) -> str:
         """יצירת תשובה עם היסטוריה מ-Gemini."""
         # המרת היסטוריה לפורמט של Gemini
-        gemini_history = []
-        for msg in messages[:-1]:  # כל ההודעות חוץ מהאחרונה
+        gemini_contents = []
+        for msg in messages:
             role = msg.get("role", "user")
             content = msg.get("content", "")
             # Gemini משתמש ב-"user" ו-"model"
             gemini_role = "model" if role == "assistant" else "user"
-            gemini_history.append({"role": gemini_role, "parts": [content]})
+            gemini_contents.append(
+                self.types.Content(role=gemini_role, parts=[self.types.Part(text=content)])
+            )
 
-        # ההודעה האחרונה היא ה-prompt הנוכחי
-        current_prompt = messages[-1].get("content", "") if messages else ""
-
-        if system_prompt:
-            current_prompt = f"{system_prompt}\n\n{current_prompt}"
-
-        generation_config = self.genai.GenerationConfig(
+        # הגדרות יצירה
+        config = self.types.GenerateContentConfig(
             max_output_tokens=max_tokens or self.max_tokens,
-            temperature=self.temperature
+            temperature=self.temperature,
+            system_instruction=system_prompt
         )
 
-        # יצירת chat עם היסטוריה
-        chat = self.model.start_chat(history=gemini_history)
-
-        import asyncio
-        response = await asyncio.to_thread(
-            chat.send_message,
-            current_prompt,
-            generation_config=generation_config
+        # קריאה אסינכרונית עם היסטוריה
+        response = await self.client.aio.models.generate_content(
+            model=self.model_name,
+            contents=gemini_contents,
+            config=config
         )
 
         return response.text
