@@ -55,7 +55,7 @@ async def blueprint_node(
         Tuple of (updated context, reply message)
     """
     logger.info(f"[{ctx.session_id}] Running blueprint node")
-    ctx.current_node = "blueprint"
+    ctx.current_node = "generate_blueprint"
 
     # Generate all blueprint components
     logger.info("Generating executive summary...")
