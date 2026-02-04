@@ -21,6 +21,8 @@ from .nodes import (
     feasibility_node,
     blueprint_node,
     critic_node,
+    ask_user_node,
+    process_user_answers,
 )
 from ..llm.client import LLMClient, create_llm_client
 
@@ -103,10 +105,26 @@ def create_architect_graph(llm_client: LLMClient = None):
 
     async def _critic(state) -> Dict[str, Any]:
         ctx = _to_ctx(state)
-        ctx, reply, next_node = await critic_node(ctx, llm_client)
+        ctx, reply, next_node, questions = await critic_node(ctx, llm_client)
         # שומר את הינט הניתוב ב-dict (לא ב-model כי underscore fields לא עוברים serialization)
         ctx_dict = ctx.model_dump()
         ctx_dict["_routing_hint"] = next_node
+        # שומר את השאלות אם יש - ישמשו את ask_user_node
+        if questions:
+            ctx_dict["_pending_questions"] = [q.model_dump() for q in questions]
+        return ctx_dict
+
+    async def _ask_user(state) -> Dict[str, Any]:
+        ctx = _to_ctx(state)
+        # לקיחת השאלות מה-state אם יש
+        questions = None
+        if isinstance(state, dict) and "_pending_questions" in state:
+            from .state import CriticQuestion
+            questions = [CriticQuestion(**q) for q in state["_pending_questions"]]
+        ctx, reply, should_continue = await ask_user_node(ctx, llm_client, questions)
+        ctx_dict = ctx.model_dump()
+        # אם צריך להמשיך (אין שאלות חדשות), מעביר hint לגרף
+        ctx_dict["_ask_user_should_continue"] = should_continue
         return ctx_dict
 
     # Add all nodes to the graph
@@ -118,6 +136,7 @@ def create_architect_graph(llm_client: LLMClient = None):
     graph.add_node("assess_feasibility", _feasibility)
     graph.add_node("generate_blueprint", _blueprint)
     graph.add_node("critic", _critic)
+    graph.add_node("ask_user", _ask_user)  # Node חדש לשאילת שאלות
 
     # ========================================
     # ROUTER NODE - מחליט מאיפה להתחיל
@@ -202,6 +221,11 @@ def create_architect_graph(llm_client: LLMClient = None):
         """
         Routing function for conditional edge from critic.
         הלוגיקה העיקרית נמצאת ב-critic_node, כאן רק קוראים את ה-routing hint.
+
+        ## Verdicts ו-Routing:
+        - accept / accept_with_notes -> END
+        - ask_user -> ask_user node (שואל את המשתמש)
+        - swap_option -> pattern node (עם forced_pattern)
         """
         # ממיר ל-dict כדי לגשת ל-_routing_hint שנוסף ב-critic node
         if isinstance(state, dict):
@@ -212,7 +236,7 @@ def create_architect_graph(llm_client: LLMClient = None):
         routing_hint = state_dict.get("_routing_hint")
 
         # אם יש routing hint תקין - משתמשים בו
-        if routing_hint and routing_hint in ["deep_dive", "conflict", "pattern"]:
+        if routing_hint and routing_hint in ["ask_user", "deep_dive", "conflict", "pattern"]:
             logger.info(f"Critic routing to: {routing_hint}")
             return routing_hint
 
@@ -224,10 +248,41 @@ def create_architect_graph(llm_client: LLMClient = None):
         "critic",
         _route_from_critic,
         {
+            "ask_user": "ask_user",  # verdict=ask_user: שואל את המשתמש
             "deep_dive": "deep_dive",
             "conflict": "conflict",
-            "pattern": "pattern",
+            "pattern": "pattern",     # verdict=swap_option: מחליף pattern
             "end": END
+        }
+    )
+
+    # ask_user - conditional routing based on should_continue
+    def _route_from_ask_user(state) -> str:
+        """
+        Routing function for ask_user node.
+        אם יש שאלות חדשות - מחכים למשתמש (END).
+        אם אין שאלות חדשות - ממשיכים לתהליך (generate_blueprint).
+        """
+        if isinstance(state, dict):
+            state_dict = state
+        else:
+            state_dict = state.model_dump()
+
+        should_continue = state_dict.get("_ask_user_should_continue", False)
+
+        if should_continue:
+            logger.info("ask_user: no new questions, continuing to generate_blueprint")
+            return "continue"
+        else:
+            logger.info("ask_user: waiting for user response")
+            return "end"
+
+    graph.add_conditional_edges(
+        "ask_user",
+        _route_from_ask_user,
+        {
+            "continue": "generate_blueprint",  # אין שאלות חדשות - ממשיכים
+            "end": END                         # יש שאלות - מחכים למשתמש
         }
     )
 
@@ -318,13 +373,18 @@ async def continue_conversation(
     # Add user message
     current_ctx.add_message("user", user_message)
 
+    # יצירת llm_client אם לא סופק
+    if llm_client is None:
+        llm_client = create_llm_client()
+
     # Determine which node to run based on current state
     if current_ctx.waiting_for_user:
         # Process based on current node
         from .nodes import (
             process_priority_response,
             process_conflict_response,
-            process_deep_dive_response
+            process_deep_dive_response,
+            process_user_answers
         )
 
         if current_ctx.current_node == "priority":
@@ -333,8 +393,12 @@ async def continue_conversation(
             process_conflict_response(current_ctx, user_message)
         elif current_ctx.current_node == "deep_dive":
             process_deep_dive_response(current_ctx, user_message)
+        elif current_ctx.current_node == "ask_user":
+            # המשתמש ענה על שאלות מ-ask_user node
+            # מעבדים את התשובות ומעדכנים את facts
+            current_ctx = await process_user_answers(current_ctx, user_message, llm_client)
         elif current_ctx.current_node == "critic":
-            # המשתמש סיפק מידע נוסף שהמבקר ביקש
+            # המשתמש סיפק מידע נוסף שהמבקר ביקש (legacy - בדרך כלל עכשיו עובר דרך ask_user)
             # ההודעה כבר נשמרה ב-conversation_history
             # הגרף ירוץ מההתחלה, אבל עם ה-context המעודכן שכולל את ההודעה החדשה
             pass
