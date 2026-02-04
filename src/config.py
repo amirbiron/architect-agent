@@ -35,7 +35,7 @@ class Settings(BaseSettings):
 
     # ============ Gemini API ============
     GOOGLE_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_MODEL: str = "gemini-2.5-pro-preview-05-06"
     GEMINI_MAX_TOKENS: int = 4096
     GEMINI_TEMPERATURE: float = 0.7
 
