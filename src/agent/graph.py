@@ -124,21 +124,21 @@ def create_architect_graph(llm_client: LLMClient = None):
 
     def _route_from_critic(state) -> str:
         """Routing function for conditional edge from critic."""
-        # מטפל גם ב-dict וגם ב-ProjectContext
+        # ממיר ל-dict כדי לגשת ל-_routing_hint שנוסף ב-critic node
         if isinstance(state, dict):
-            routing_hint = state.get("_routing_hint")
-            ctx = ProjectContext.model_validate(state)
+            state_dict = state
         else:
-            # state הוא ProjectContext
-            routing_hint = getattr(state, "_routing_hint", None)
-            ctx = state
+            # state הוא ProjectContext - ממיר ל-dict
+            state_dict = state.model_dump()
 
+        routing_hint = state_dict.get("_routing_hint")
         if routing_hint:
             if routing_hint in ["deep_dive", "conflict", "pattern"]:
                 logger.info(f"Critic routing to: {routing_hint}")
                 return routing_hint
 
         # Fallback to route_from_critic logic
+        ctx = ProjectContext.model_validate(state_dict)
         result = route_from_critic(ctx)
         logger.info(f"Critic routing (fallback) to: {result}")
         return result
