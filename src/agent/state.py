@@ -195,6 +195,7 @@ class ProjectContext(BaseModel):
     # ---- Internal flags ----
     waiting_for_user: bool = False
     error_message: Optional[str] = None
+    _routing_hint: Optional[str] = None  # הינט לניתוב מ-critic node
 
     def add_message(self, role: str, content: str) -> None:
         """Add a message to conversation history."""

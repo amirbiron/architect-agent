@@ -84,10 +84,9 @@ def create_architect_graph(llm_client: LLMClient = None):
 
     async def _critic(state: ProjectContext) -> Dict[str, Any]:
         ctx, reply, next_node = await critic_node(state, llm_client)
-        # Store routing hint in state
-        ctx_dict = ctx.model_dump()
-        ctx_dict["_routing_hint"] = next_node
-        return ctx_dict
+        # שומר את הינט הניתוב ב-state
+        ctx._routing_hint = next_node
+        return ctx.model_dump()
 
     # Add all nodes
     graph.add_node("intake", _intake)
@@ -194,8 +193,11 @@ async def run_agent(
     )
     initial_state.add_message("user", initial_message)
 
-    # Run configuration
-    config = {"configurable": {"thread_id": session_id}}
+    # Run configuration - מגדיל את ה-recursion limit כדי לאפשר יותר איטרציות
+    config = {
+        "configurable": {"thread_id": session_id},
+        "recursion_limit": 50  # ברירת מחדל היא 25, מגדילים ל-50
+    }
 
     # Execute the graph
     result = await graph.ainvoke(initial_state.model_dump(), config)
@@ -255,7 +257,10 @@ async def continue_conversation(
 
     # Create and run graph from current state
     graph = create_architect_graph(llm_client)
-    config = {"configurable": {"thread_id": session_id}}
+    config = {
+        "configurable": {"thread_id": session_id},
+        "recursion_limit": 50
+    }
 
     result = await graph.ainvoke(current_ctx.model_dump(), config)
     final_ctx = ProjectContext.model_validate(result)
