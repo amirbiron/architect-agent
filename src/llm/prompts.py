@@ -436,9 +436,9 @@ CRITIC_PROMPT = """אתה Enterprise Red Team Architect (מבקר).
 
 ## 📊 חישוב Confidence (נוסחה קשיחה!):
 התחל מ-1.0 והפחת:
-- -0.20 לכל unknown עם impact=high
-- -0.10 לכל must_fix עם severity גבוהה
-- -0.10 אם יש K8s/Kafka/CQRS בלי הצדקה מפורשת מדרישות
+- -0.35 לכל unknown עם impact=high (מבטיח שאחד כזה מוריד מתחת ל-0.7)
+- -0.15 לכל must_fix עם severity גבוהה
+- -0.15 אם יש K8s/Kafka/CQRS בלי הצדקה מפורשת מדרישות
 - -0.05 לכל assumption משמעותית שלא אומתה
 
 התוצאה קובעת את ה-verdict:
@@ -508,14 +508,16 @@ TECH_STACK_PROMPT = """המלץ על Tech Stack מתאים (Enterprise mode).
 - CONSTRAINT: מאילוץ מפורש
 - BASELINE_ENTERPRISE: תקן ארגוני (logging, auth, secrets)
 
-## המלץ על טכנולוגיה לכל שכבה:
-1. **Backend** - שפה ו-framework (justified_by: CONSTRAINT או REQUIREMENT)
-2. **Database** - primary database (justified_by: REQUIREMENT או NFR)
-3. **Cache** - רק אם latency < 100ms נדרש (justified_by: NFR)
-4. **Messaging** - רק אם event propagation נדרש (justified_by: REQUIREMENT)
-5. **Auth** - פתרון אימות (justified_by: REQUIREMENT או BASELINE_ENTERPRISE)
-6. **Observability** - logging + metrics (justified_by: BASELINE_ENTERPRISE)
-7. **Deployment** - container platform (justified_by: NFR או CONSTRAINT)
+## המלץ על טכנולוגיה לכל שכבה (דלג על לא רלוונטיות):
+1. **Frontend** - אם רלוונטי (justified_by: REQUIREMENT)
+2. **Backend** - שפה ו-framework (justified_by: CONSTRAINT או REQUIREMENT)
+3. **Database** - primary database (justified_by: REQUIREMENT או NFR)
+4. **Cache** - רק אם latency < 100ms נדרש (justified_by: NFR)
+5. **Messaging** - רק אם event propagation נדרש (justified_by: REQUIREMENT)
+6. **Auth** - פתרון אימות (justified_by: REQUIREMENT או BASELINE_ENTERPRISE)
+7. **CI/CD** - pipeline פשוט (justified_by: BASELINE_ENTERPRISE)
+8. **Observability** - logging + metrics (justified_by: BASELINE_ENTERPRISE)
+9. **Deployment** - container platform (justified_by: NFR או CONSTRAINT)
 
 ## פורמט תשובה לכל שכבה:
 ```
