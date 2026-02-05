@@ -84,9 +84,13 @@
             opacity: 0.4;
             background: #e94560;
         }
-        .model-item.drag-over {
+        .model-item.drag-over-top {
             border-top: 3px solid #e94560;
             margin-top: -3px;
+        }
+        .model-item.drag-over-bottom {
+            border-bottom: 3px solid #e94560;
+            margin-bottom: -3px;
         }
         .model-item.disabled {
             opacity: 0.4;
@@ -419,7 +423,6 @@
 
         // ========== Drag & Drop ==========
         let draggedItem = null;
-        let dropTarget = null;
 
         function initDragAndDrop() {
             const items = document.querySelectorAll('.model-item:not(.disabled)');
@@ -445,10 +448,11 @@
         function handleDragEnd(e) {
             this.classList.remove('dragging');
             this.style.opacity = '1';
-            // הסרת כל ה-drag-over
-            document.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+            // הסרת כל סימוני הגרירה
+            document.querySelectorAll('.drag-over-top, .drag-over-bottom').forEach(el => {
+                el.classList.remove('drag-over-top', 'drag-over-bottom');
+            });
             draggedItem = null;
-            dropTarget = null;
             // עדכון מערך המודלים
             updateModelOrder();
         }
@@ -461,18 +465,34 @@
         function handleDragEnter(e) {
             e.preventDefault();
             if (this !== draggedItem && !this.classList.contains('disabled')) {
-                this.classList.add('drag-over');
-                dropTarget = this;
+                // הסרת סימונים קודמים
+                document.querySelectorAll('.drag-over-top, .drag-over-bottom').forEach(el => {
+                    el.classList.remove('drag-over-top', 'drag-over-bottom');
+                });
+
+                // קביעת כיוון הגרירה
+                const container = document.getElementById('modelList');
+                const allItems = [...container.querySelectorAll('.model-item')];
+                const draggedIdx = allItems.indexOf(draggedItem);
+                const targetIdx = allItems.indexOf(this);
+
+                if (draggedIdx < targetIdx) {
+                    // גורר למטה - יוכנס אחרי היעד
+                    this.classList.add('drag-over-bottom');
+                } else {
+                    // גורר למעלה - יוכנס לפני היעד
+                    this.classList.add('drag-over-top');
+                }
             }
         }
 
         function handleDragLeave(e) {
-            this.classList.remove('drag-over');
+            this.classList.remove('drag-over-top', 'drag-over-bottom');
         }
 
         function handleDrop(e) {
             e.preventDefault();
-            this.classList.remove('drag-over');
+            this.classList.remove('drag-over-top', 'drag-over-bottom');
 
             if (draggedItem && this !== draggedItem && !this.classList.contains('disabled')) {
                 const container = document.getElementById('modelList');
