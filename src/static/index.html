@@ -301,6 +301,11 @@
             cursor: not-allowed;
             transform: none;
         }
+        #copyAllBtn {
+            background: #0f3460;
+            border: 2px solid #e94560;
+        }
+        #copyAllBtn:hover { background: #1a4a80; }
 
         /* Progress */
         .progress-bar {
@@ -360,6 +365,7 @@
                     placeholder="כתוב את השאלה שלך כאן..."
                     onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); sendQuestion(); }"
                 ></textarea>
+                <button id="copyAllBtn" onclick="copyAllResponses()" style="display: none;">📋 העתק הכל</button>
                 <button id="sendBtn" onclick="sendQuestion()">🚀 שלח</button>
             </div>
         </section>
@@ -565,6 +571,8 @@
 
             isProcessing = false;
             document.getElementById('sendBtn').disabled = false;
+            // הצגת כפתור "העתק הכל" אחרי שיש תשובות
+            document.getElementById('copyAllBtn').style.display = 'block';
         }
 
         function handleSSEMessage(data, index) {
@@ -629,6 +637,43 @@
                 setTimeout(() => {
                     button.textContent = 'העתק';
                     button.classList.remove('copied');
+                }, 2000);
+            } catch (err) {
+                console.error('שגיאה בהעתקה:', err);
+            }
+        }
+
+        async function copyAllResponses() {
+            const messages = document.querySelectorAll('.message');
+            let markdown = '# Multi-Model Opinion Flow\n\n';
+            let currentQuestion = '';
+
+            messages.forEach(msg => {
+                if (msg.classList.contains('user')) {
+                    // שאלת המשתמש
+                    currentQuestion = msg.innerText.replace('אתה: ', '');
+                    markdown += `## השאלה:\n${currentQuestion}\n\n---\n\n`;
+                } else if (msg.classList.contains('model') && !msg.classList.contains('processing')) {
+                    // תשובת מודל
+                    const modelBadge = msg.querySelector('.model-badge');
+                    const orderBadge = msg.querySelector('.message-order');
+                    const content = msg.querySelector('.message-content');
+
+                    if (modelBadge && content) {
+                        const modelName = modelBadge.innerText;
+                        const order = orderBadge ? orderBadge.innerText : '';
+                        markdown += `### ${modelName} (${order})\n\n`;
+                        markdown += content.innerText + '\n\n---\n\n';
+                    }
+                }
+            });
+
+            try {
+                await navigator.clipboard.writeText(markdown);
+                const btn = document.getElementById('copyAllBtn');
+                btn.textContent = '✅ הועתק!';
+                setTimeout(() => {
+                    btn.textContent = '📋 העתק הכל';
                 }, 2000);
             } catch (err) {
                 console.error('שגיאה בהעתקה:', err);
