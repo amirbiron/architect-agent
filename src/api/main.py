@@ -79,8 +79,8 @@ async def ask_question(request: QuestionRequest):
     שולח שאלה למודלים ומחזיר תשובות ב-streaming.
     כל תשובה נשלחת כ-Server-Sent Event.
     """
-    # דיווח פעילות
-    reporter.report_activity(0)
+    # דיווח פעילות (ב-thread נפרד כדי לא לחסום את ה-event loop)
+    asyncio.create_task(asyncio.to_thread(reporter.report_activity, 0))
 
     flow = MultiModelFlow(model_order=request.models)
     available = flow.get_available_models()
