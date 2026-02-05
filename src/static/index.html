@@ -80,7 +80,18 @@
             border: 2px solid transparent;
         }
         .model-item:hover { background: #1a4a80; }
-        .model-item.dragging { opacity: 0.5; transform: scale(1.02); }
+        .model-item.dragging {
+            opacity: 0.4;
+            background: #e94560;
+        }
+        .model-item.drag-over-top {
+            border-top: 3px solid #e94560;
+            margin-top: -3px;
+        }
+        .model-item.drag-over-bottom {
+            border-bottom: 3px solid #e94560;
+            margin-bottom: -3px;
+        }
         .model-item.disabled {
             opacity: 0.4;
             cursor: not-allowed;
@@ -301,6 +312,11 @@
             cursor: not-allowed;
             transform: none;
         }
+        #copyAllBtn {
+            background: #0f3460;
+            border: 2px solid #e94560;
+        }
+        #copyAllBtn:hover { background: #1a4a80; }
 
         /* Progress */
         .progress-bar {
@@ -360,6 +376,7 @@
                     placeholder="כתוב את השאלה שלך כאן..."
                     onkeydown="if(event.key==='Enter' && !event.shiftKey) { event.preventDefault(); sendQuestion(); }"
                 ></textarea>
+                <button id="copyAllBtn" onclick="copyAllResponses()" style="display: none;">📋 העתק הכל</button>
                 <button id="sendBtn" onclick="sendQuestion()">🚀 שלח</button>
             </div>
         </section>
@@ -406,23 +423,16 @@
 
         // ========== Drag & Drop ==========
         let draggedItem = null;
-        let containerListenersAdded = false;  // דגל למניעת כפילויות
 
         function initDragAndDrop() {
-            const container = document.getElementById('modelList');
-
-            // אירועים על ה-container - רק פעם אחת!
-            if (!containerListenersAdded) {
-                container.addEventListener('dragover', handleDragOver);
-                container.addEventListener('drop', handleDrop);
-                containerListenersAdded = true;
-            }
-
-            // אירועים על כל פריט (האלמנטים נוצרים מחדש בכל renderModelList)
-            const items = container.querySelectorAll('.model-item:not(.disabled)');
+            const items = document.querySelectorAll('.model-item:not(.disabled)');
             items.forEach(item => {
                 item.addEventListener('dragstart', handleDragStart);
                 item.addEventListener('dragend', handleDragEnd);
+                item.addEventListener('dragover', handleDragOver);
+                item.addEventListener('dragenter', handleDragEnter);
+                item.addEventListener('dragleave', handleDragLeave);
+                item.addEventListener('drop', handleDrop);
             });
         }
 
@@ -430,48 +440,74 @@
             draggedItem = this;
             this.classList.add('dragging');
             e.dataTransfer.effectAllowed = 'move';
-            e.dataTransfer.setData('text/plain', ''); // נדרש ל-Firefox
+            e.dataTransfer.setData('text/plain', this.dataset.id);
+            // עיכוב קטן כדי שה-CSS יעבוד
+            setTimeout(() => this.style.opacity = '0.4', 0);
         }
 
         function handleDragEnd(e) {
             this.classList.remove('dragging');
-            // עדכון הסדר בסיום הגרירה
-            updateModelOrder();
+            this.style.opacity = '1';
+            // הסרת כל סימוני הגרירה
+            document.querySelectorAll('.drag-over-top, .drag-over-bottom').forEach(el => {
+                el.classList.remove('drag-over-top', 'drag-over-bottom');
+            });
             draggedItem = null;
+            // עדכון מערך המודלים
+            updateModelOrder();
         }
 
         function handleDragOver(e) {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
+        }
 
-            if (!draggedItem) return;
+        function handleDragEnter(e) {
+            e.preventDefault();
+            if (this !== draggedItem && !this.classList.contains('disabled')) {
+                // הסרת סימונים קודמים
+                document.querySelectorAll('.drag-over-top, .drag-over-bottom').forEach(el => {
+                    el.classList.remove('drag-over-top', 'drag-over-bottom');
+                });
 
-            const container = document.getElementById('modelList');
-            const afterElement = getDragAfterElement(container, e.clientY);
+                // קביעת כיוון הגרירה
+                const container = document.getElementById('modelList');
+                const allItems = [...container.querySelectorAll('.model-item')];
+                const draggedIdx = allItems.indexOf(draggedItem);
+                const targetIdx = allItems.indexOf(this);
 
-            if (afterElement == null) {
-                container.appendChild(draggedItem);
-            } else {
-                container.insertBefore(draggedItem, afterElement);
+                if (draggedIdx < targetIdx) {
+                    // גורר למטה - יוכנס אחרי היעד
+                    this.classList.add('drag-over-bottom');
+                } else {
+                    // גורר למעלה - יוכנס לפני היעד
+                    this.classList.add('drag-over-top');
+                }
             }
+        }
+
+        function handleDragLeave(e) {
+            this.classList.remove('drag-over-top', 'drag-over-bottom');
         }
 
         function handleDrop(e) {
             e.preventDefault();
-        }
+            this.classList.remove('drag-over-top', 'drag-over-bottom');
 
-        function getDragAfterElement(container, y) {
-            const draggableElements = [...container.querySelectorAll('.model-item:not(.dragging):not(.disabled)')];
+            if (draggedItem && this !== draggedItem && !this.classList.contains('disabled')) {
+                const container = document.getElementById('modelList');
+                const allItems = [...container.querySelectorAll('.model-item')];
+                const draggedIdx = allItems.indexOf(draggedItem);
+                const dropIdx = allItems.indexOf(this);
 
-            return draggableElements.reduce((closest, child) => {
-                const box = child.getBoundingClientRect();
-                const offset = y - box.top - box.height / 2;
-                if (offset < 0 && offset > closest.offset) {
-                    return { offset: offset, element: child };
+                if (draggedIdx < dropIdx) {
+                    // גורר למטה - הכנס אחרי היעד
+                    this.parentNode.insertBefore(draggedItem, this.nextSibling);
                 } else {
-                    return closest;
+                    // גורר למעלה - הכנס לפני היעד
+                    this.parentNode.insertBefore(draggedItem, this);
                 }
-            }, { offset: Number.NEGATIVE_INFINITY }).element;
+            }
         }
 
         function updateModelOrder() {
@@ -565,6 +601,8 @@
 
             isProcessing = false;
             document.getElementById('sendBtn').disabled = false;
+            // הצגת כפתור "העתק הכל" אחרי שיש תשובות
+            document.getElementById('copyAllBtn').style.display = 'block';
         }
 
         function handleSSEMessage(data, index) {
@@ -629,6 +667,43 @@
                 setTimeout(() => {
                     button.textContent = 'העתק';
                     button.classList.remove('copied');
+                }, 2000);
+            } catch (err) {
+                console.error('שגיאה בהעתקה:', err);
+            }
+        }
+
+        async function copyAllResponses() {
+            const messages = document.querySelectorAll('.message');
+            let markdown = '# Multi-Model Opinion Flow\n\n';
+            let currentQuestion = '';
+
+            messages.forEach(msg => {
+                if (msg.classList.contains('user')) {
+                    // שאלת המשתמש
+                    currentQuestion = msg.innerText.replace('אתה: ', '');
+                    markdown += `## השאלה:\n${currentQuestion}\n\n---\n\n`;
+                } else if (msg.classList.contains('model') && !msg.classList.contains('processing')) {
+                    // תשובת מודל
+                    const modelBadge = msg.querySelector('.model-badge');
+                    const orderBadge = msg.querySelector('.message-order');
+                    const content = msg.querySelector('.message-content');
+
+                    if (modelBadge && content) {
+                        const modelName = modelBadge.innerText;
+                        const orderText = orderBadge ? ` (${orderBadge.innerText})` : '';
+                        markdown += `### ${modelName}${orderText}\n\n`;
+                        markdown += content.innerText + '\n\n---\n\n';
+                    }
+                }
+            });
+
+            try {
+                await navigator.clipboard.writeText(markdown);
+                const btn = document.getElementById('copyAllBtn');
+                btn.textContent = '✅ הועתק!';
+                setTimeout(() => {
+                    btn.textContent = '📋 העתק הכל';
                 }, 2000);
             } catch (err) {
                 console.error('שגיאה בהעתקה:', err);
