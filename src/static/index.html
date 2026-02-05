@@ -405,34 +405,46 @@
         }
 
         // ========== Drag & Drop ==========
+        let draggedItem = null;
+        let containerListenersAdded = false;  // דגל למניעת כפילויות
+
         function initDragAndDrop() {
             const container = document.getElementById('modelList');
-            const items = container.querySelectorAll('.model-item:not(.disabled)');
 
+            // אירועים על ה-container - רק פעם אחת!
+            if (!containerListenersAdded) {
+                container.addEventListener('dragover', handleDragOver);
+                container.addEventListener('drop', handleDrop);
+                containerListenersAdded = true;
+            }
+
+            // אירועים על כל פריט (האלמנטים נוצרים מחדש בכל renderModelList)
+            const items = container.querySelectorAll('.model-item:not(.disabled)');
             items.forEach(item => {
                 item.addEventListener('dragstart', handleDragStart);
                 item.addEventListener('dragend', handleDragEnd);
-                item.addEventListener('dragover', handleDragOver);
-                item.addEventListener('drop', handleDrop);
             });
         }
-
-        let draggedItem = null;
 
         function handleDragStart(e) {
             draggedItem = this;
             this.classList.add('dragging');
             e.dataTransfer.effectAllowed = 'move';
+            e.dataTransfer.setData('text/plain', ''); // נדרש ל-Firefox
         }
 
         function handleDragEnd(e) {
             this.classList.remove('dragging');
+            // עדכון הסדר בסיום הגרירה
+            updateModelOrder();
             draggedItem = null;
         }
 
         function handleDragOver(e) {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
+
+            if (!draggedItem) return;
 
             const container = document.getElementById('modelList');
             const afterElement = getDragAfterElement(container, e.clientY);
@@ -446,11 +458,10 @@
 
         function handleDrop(e) {
             e.preventDefault();
-            updateModelOrder();
         }
 
         function getDragAfterElement(container, y) {
-            const draggableElements = [...container.querySelectorAll('.model-item:not(.dragging)')];
+            const draggableElements = [...container.querySelectorAll('.model-item:not(.dragging):not(.disabled)')];
 
             return draggableElements.reduce((closest, child) => {
                 const box = child.getBoundingClientRect();
@@ -472,6 +483,7 @@
                 if (model) newOrder.push(model);
             });
             models = newOrder;
+            console.log('סדר חדש:', models.map(m => m.id));
         }
 
         function toggleModel(modelId) {
